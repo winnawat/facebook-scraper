@@ -357,10 +357,7 @@ class FacebookScraper:
             except Exception as e:
                 result["Following_count"] = None
                 logger.error(f"Following_count extraction failed: {e}")
-            try:
-                photo_links = response.html.find("a[href^='/photo.php']")
-            except:
-                pass
+            photo_links = response.html.find("a[href^='/photo.php']")
             if len(photo_links) == 1:
                 profile_photo = photo_links[0]
                 response = self.get(profile_photo.attrs.get("href"))
