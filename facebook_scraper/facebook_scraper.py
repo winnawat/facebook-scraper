@@ -862,89 +862,91 @@ class FacebookScraper:
             url = str(url)
             if not url.startswith("http"):
                 url = utils.urljoin(FB_MOBILE_BASE_URL, url)
+            try:
+                if kwargs.get("post"):
+                    kwargs.pop("post")
+                    response = self.session.post(url=url, **kwargs)
+                else:
+                    response = self.session.get(url=url, **self.requests_kwargs, **kwargs)
+                DEBUG = False
+                if DEBUG:
+                    for filename in os.listdir("."):
+                        if filename.endswith(".html") and filename.replace(".html", "") in url:
+                            logger.debug(f"Replacing {url} content with {filename}")
+                            with open(filename) as f:
+                                response.html.html = f.read()
+                response.html.html = response.html.html.replace('<!--', '').replace('-->', '')
+                response.raise_for_status()
+                self.check_locale(response)
 
-            if kwargs.get("post"):
-                kwargs.pop("post")
-                response = self.session.post(url=url, **kwargs)
-            else:
-                response = self.session.get(url=url, **self.requests_kwargs, **kwargs)
-            DEBUG = False
-            if DEBUG:
-                for filename in os.listdir("."):
-                    if filename.endswith(".html") and filename.replace(".html", "") in url:
-                        logger.debug(f"Replacing {url} content with {filename}")
-                        with open(filename) as f:
-                            response.html.html = f.read()
-            response.html.html = response.html.html.replace('<!--', '').replace('-->', '')
-            response.raise_for_status()
-            self.check_locale(response)
-
-            # Special handling for video posts that redirect to /watch/
-            if response.url == "https://m.facebook.com/watch/?ref=watch_permalink":
-                post_url = re.search("\d+", url).group()
-                if post_url:
-                    url = utils.urljoin(
-                        FB_MOBILE_BASE_URL,
-                        f"story.php?story_fbid={post_url}&id=1&m_entstream_source=timeline",
-                    )
-                    post = {"original_request_url": post_url, "post_url": url}
-                    logger.debug(f"Requesting page from: {url}")
+                # Special handling for video posts that redirect to /watch/
+                if response.url == "https://m.facebook.com/watch/?ref=watch_permalink":
+                    post_url = re.search("\d+", url).group()
+                    if post_url:
+                        url = utils.urljoin(
+                            FB_MOBILE_BASE_URL,
+                            f"story.php?story_fbid={post_url}&id=1&m_entstream_source=timeline",
+                        )
+                        post = {"original_request_url": post_url, "post_url": url}
+                        logger.debug(f"Requesting page from: {url}")
+                        response = self.get(url)
+                if "/watch/" in response.url:
+                    video_id = parse_qs(urlparse(response.url).query).get("v")[0]
+                    url = f"story.php?story_fbid={video_id}&id={video_id}&m_entstream_source=video_home&player_suborigin=entry_point&player_format=permalink"
+                    logger.debug(f"Fetching {url}")
                     response = self.get(url)
-            if "/watch/" in response.url:
-                video_id = parse_qs(urlparse(response.url).query).get("v")[0]
-                url = f"story.php?story_fbid={video_id}&id={video_id}&m_entstream_source=video_home&player_suborigin=entry_point&player_format=permalink"
-                logger.debug(f"Fetching {url}")
-                response = self.get(url)
 
-            if "cookie/consent-page" in response.url:
-                response = self.submit_form(response)
-            if (
-                response.url.startswith(FB_MOBILE_BASE_URL)
-                and not response.html.find("script", first=True)
-                and "script" not in response.html.html
-                and self.session.cookies.get("noscript") != "1"
-            ):
-                warnings.warn(
-                    f"Facebook served mbasic/noscript content unexpectedly on {response.url}"
-                )
-            if response.html.find("h1,h2", containing="Unsupported Browser"):
-                warnings.warn(f"Facebook says 'Unsupported Browser'")
-            title = response.html.find("title", first=True)
-            not_found_titles = ["page not found", "content not found"]
-            temp_ban_titles = [
-                "you can't use this feature at the moment",
-                "you can't use this feature right now",
-                "you’re temporarily blocked",
-            ]
-            if "checkpoint" in response.url:
-                if response.html.find("h1", containing="We suspended your account"):
-                    raise exceptions.AccountDisabled("Your Account Has Been Disabled")
-            if title:
-                if title.text.lower() in not_found_titles:
-                    raise exceptions.NotFound(title.text)
-                elif title.text.lower() == "error":
-                    raise exceptions.UnexpectedResponse("Your request couldn't be processed")
-                elif title.text.lower() in temp_ban_titles:
-                    raise exceptions.TemporarilyBanned(title.text)
-                elif ">your account has been disabled<" in response.html.html.lower():
-                    raise exceptions.AccountDisabled("Your Account Has Been Disabled")
-                elif (
-                    ">We saw unusual activity on your account. This may mean that someone has used your account without your knowledge.<"
-                    in response.html.html
+                if "cookie/consent-page" in response.url:
+                    response = self.submit_form(response)
+                if (
+                    response.url.startswith(FB_MOBILE_BASE_URL)
+                    and not response.html.find("script", first=True)
+                    and "script" not in response.html.html
+                    and self.session.cookies.get("noscript") != "1"
                 ):
-                    raise exceptions.AccountDisabled("Your Account Has Been Locked")
-                elif (
-                    title.text == "Log in to Facebook | Facebook"
-                    or response.url.startswith(utils.urljoin(FB_MOBILE_BASE_URL, "login"))
-                    or response.url.startswith(utils.urljoin(FB_W3_BASE_URL, "login"))
-                ):
-                    raise exceptions.LoginRequired(
-                        "A login (cookies) is required to see this page"
+                    warnings.warn(
+                        f"Facebook served mbasic/noscript content unexpectedly on {response.url}"
                     )
-            return response
+                if response.html.find("h1,h2", containing="Unsupported Browser"):
+                    warnings.warn(f"Facebook says 'Unsupported Browser'")
+                title = response.html.find("title", first=True)
+                not_found_titles = ["page not found", "content not found"]
+                temp_ban_titles = [
+                    "you can't use this feature at the moment",
+                    "you can't use this feature right now",
+                    "you’re temporarily blocked",
+                ]
+                if "checkpoint" in response.url:
+                    if response.html.find("h1", containing="We suspended your account"):
+                        raise exceptions.AccountDisabled("Your Account Has Been Disabled")
+                if title:
+                    if title.text.lower() in not_found_titles:
+                        raise exceptions.NotFound(title.text)
+                    elif title.text.lower() == "error":
+                        raise exceptions.UnexpectedResponse("Your request couldn't be processed")
+                    elif title.text.lower() in temp_ban_titles:
+                        raise exceptions.TemporarilyBanned(title.text)
+                    elif ">your account has been disabled<" in response.html.html.lower():
+                        raise exceptions.AccountDisabled("Your Account Has Been Disabled")
+                    elif (
+                        ">We saw unusual activity on your account. This may mean that someone has used your account without your knowledge.<"
+                        in response.html.html
+                    ):
+                        raise exceptions.AccountDisabled("Your Account Has Been Locked")
+                    elif (
+                        title.text == "Log in to Facebook | Facebook"
+                        or response.url.startswith(utils.urljoin(FB_MOBILE_BASE_URL, "login"))
+                        or response.url.startswith(utils.urljoin(FB_W3_BASE_URL, "login"))
+                    ):
+                        raise exceptions.LoginRequired(
+                            "A login (cookies) is required to see this page"
+                        )
+                return response
+            except:
+                pass
         except RequestException as ex:
             logger.exception("Exception while requesting URL: %s\nException: %r", url, ex)
-            pass
+            raise
 
     def submit_form(self, response, extra_data={}):
         action = response.html.find("form", first=True).attrs.get('action')
@@ -1111,16 +1113,16 @@ class FacebookScraper:
             counter = itertools.count(0) if page_limit is None else range(page_limit)
 
             logger.debug("Starting to iterate pages")
-            try:
-                for i, page in zip(counter, iter_pages_fn()):
+            for i, page in zip(counter, iter_pages_fn()):
                     logger.debug("Extracting posts from page %s", i)
                     for post_element in page:
+                        try:
                             post = extract_post_fn(post_element, options=options, request_fn=self.get)
                             if remove_source:
                                 post.pop('source', None)
                             yield post
-            except:
-                pass
+                        except:
+                            pass
 
 
     def get_groups_by_search(self, word: str, **kwargs):
