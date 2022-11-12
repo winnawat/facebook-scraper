@@ -945,8 +945,6 @@ class FacebookScraper:
             return response
         except RequestException as ex:
             logger.exception("Exception while requesting URL: %s\nException: %r", url, ex)
-            raise
-        except:
             pass
 
     def submit_form(self, response, extra_data={}):
