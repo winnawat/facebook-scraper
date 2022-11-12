@@ -1111,19 +1111,16 @@ class FacebookScraper:
             counter = itertools.count(0) if page_limit is None else range(page_limit)
 
             logger.debug("Starting to iterate pages")
-            if iter_pages_fn() != None:
+            try:
                 for i, page in zip(counter, iter_pages_fn()):
                     logger.debug("Extracting posts from page %s", i)
                     for post_element in page:
-                        try:
                             post = extract_post_fn(post_element, options=options, request_fn=self.get)
                             if remove_source:
                                 post.pop('source', None)
                             yield post
-                        except:
-                            pass
-            else:
-                print("iter_pages_fn is None")
+            except:
+                pass
 
 
     def get_groups_by_search(self, word: str, **kwargs):
