@@ -946,6 +946,8 @@ class FacebookScraper:
         except RequestException as ex:
             logger.exception("Exception while requesting URL: %s\nException: %r", url, ex)
             raise
+        except:
+            pass
 
     def submit_form(self, response, extra_data={}):
         action = response.html.find("form", first=True).attrs.get('action')
@@ -1115,10 +1117,14 @@ class FacebookScraper:
             for i, page in zip(counter, iter_pages_fn()):
                 logger.debug("Extracting posts from page %s", i)
                 for post_element in page:
-                    post = extract_post_fn(post_element, options=options, request_fn=self.get)
-                    if remove_source:
-                        post.pop('source', None)
-                    yield post
+                    try:
+                        post = extract_post_fn(post_element, options=options, request_fn=self.get)
+                        if remove_source:
+                            post.pop('source', None)
+                        yield post
+                    except:
+                        pass
+
 
     def get_groups_by_search(self, word: str, **kwargs):
         group_search_url = utils.urljoin(FB_MOBILE_BASE_URL, f"search/groups/?q={word}")
