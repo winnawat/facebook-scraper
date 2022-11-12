@@ -174,8 +174,11 @@ class PageParser:
         return None
 
     def _parse(self):
-        if self.response.text.startswith(self.json_prefix):
-            self._parse_json()
+        try:
+            if self.response.text.startswith(self.json_prefix):
+                self._parse_json()
+        except AttributeError as e:
+            self._parse_html()
         else:
             self._parse_html()
 
