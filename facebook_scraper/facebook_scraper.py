@@ -1047,7 +1047,7 @@ class FacebookScraper:
             done = False
 
             for page in iter_pages_fn():
-
+                print(page)
                 for post_element in page:
                     try:
                         post = extract_post_fn(post_element, options=options, request_fn=self.get)
