@@ -314,7 +314,7 @@ class FacebookScraper:
         account = account.replace("profile.php?id=", "")
         result = {}
 
-        if kwargs.get("allow_extra_requests", True):
+        if False: #kwargs.get("allow_extra_requests", True):
             logger.debug(f"Requesting page from: {account}")
             response = self.get(account)
             try:
